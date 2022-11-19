@@ -1,4 +1,4 @@
-module github.com/brianosaurus/challenge1
+module github.com/brianosaurus/challenge2
 
 go 1.19
 

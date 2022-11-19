@@ -5,227 +5,21 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math/big"
 	"os"
 	"sort"
 	"strconv"
-	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	vestingTypes "github.com/cosmos/cosmos-sdk/x/auth/vesting/types"
-	mintingTypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 
-	"github.com/cosmos/cosmos-sdk/codec"
+	mintingTypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+	vestingModule "github.com/brianosaurus/challenge2/vesting"
+	stakingModule "github.com/brianosaurus/challenge2/staking"
+	mintModule "github.com/brianosaurus/challenge2/mint"
 )
 
 const (
 	SECONDS_PER_BLOCK = 5
 )
-
-func NewDelayedVestingAccount(account map[string]interface{}, codec *codec.LegacyAmino) *vestingTypes.DelayedVestingAccount {
-	rawAccount, err := json.Marshal(account)
-	if err != nil {
-		fmt.Println("Error marshalling DelayedVestingAccount")
-		return nil
-	}
-
-	var delayedVestingAccount vestingTypes.DelayedVestingAccount
-	err = codec.UnmarshalJSON(rawAccount, &delayedVestingAccount)
-	if err != nil {
-		panic(fmt.Sprintln("Error unmarshalling DelayedVestingAccount", err))
-	}
-
-	return &delayedVestingAccount
-}
-
-func NewContinuousVestingAccount(account map[string]interface{}, codec *codec.LegacyAmino) *vestingTypes.ContinuousVestingAccount {
-	rawAccount, err := json.Marshal(account)
-	if err != nil {
-		fmt.Println("Error marshalling DelayedVestingAccount")
-		return nil
-	}
-
-	var continuousVestingAccount vestingTypes.ContinuousVestingAccount
-	err = codec.UnmarshalJSON(rawAccount, &continuousVestingAccount)
-	if err != nil {
-		panic(fmt.Sprintln("Error unmarshalling ContinuousVestingAccount", err))
-	}
-
-	return &continuousVestingAccount
-}
-
-// there are no periodic vesting accounts in the genesis file so I am not implementing this
-// func NewPeriodicVestingAccount(baseAccount *authTypes.BaseAccount, baseVestingAccountJson map[string]interface{}) vestingTypes.NewPeriodicVestingAccount {
-// }
-func GetVestingAccounts(appState map[string]interface{}) (map[string]*vestingTypes.ContinuousVestingAccount,
-	map[string]*vestingTypes.DelayedVestingAccount,
-) {
-	auth := (appState["auth"]).(map[string]interface{})
-	accounts := (auth["accounts"]).([]interface{})
-
-	// two arrays for delayed and continuous vesting accounts
-	continuousAccounts := make(map[string]*vestingTypes.ContinuousVestingAccount)
-	delayedAccounts := make(map[string]*vestingTypes.DelayedVestingAccount)
-
-	// genesis.json is in the amino format. We need to use the amino codec to unmarshal the accounts
-	cdc := codec.NewLegacyAmino()
-
-	for _, account := range accounts {
-		if account.(map[string]interface{})["@type"] == "/cosmos.auth.v1beta1.BaseAccount" {
-			continue
-		}
-
-		if account.(map[string]interface{})["@type"] == "/cosmos.vesting.v1beta1.ContinuousVestingAccount" {
-			continuousAccount := NewContinuousVestingAccount(account.(map[string]interface{}), cdc)
-
-			if continuousAccount != nil {
-				continuousAccounts[continuousAccount.Address] = continuousAccount
-			}
-		} else {
-			delayedAccount := NewDelayedVestingAccount(account.(map[string]interface{}), cdc)
-
-			if delayedAccount != nil {
-				delayedAccounts[delayedAccount.Address] = delayedAccount
-			}
-		}
-	}
-
-	return continuousAccounts, delayedAccounts
-}
-
-func GetTotalSupplyAndVestingSchedule(appState map[string]interface{}, continuousAccounts map[string]*vestingTypes.ContinuousVestingAccount,
-	delayedAccounts map[string]*vestingTypes.DelayedVestingAccount,
-) (sdk.Dec, *map[int]sdk.Dec) {
-	bank := (appState["bank"]).(map[string]interface{})
-	balances := (bank["balances"]).([]interface{})
-
-	totalSupply := sdk.NewDec(0)
-
-	for _, account := range balances {
-		baseAccount := account.(map[string]interface{})
-		address := baseAccount["address"].(string)
-
-		// if it is a vesting account skip (for now)
-		if _, ok := continuousAccounts[address]; ok {
-			continue
-		}
-
-		if _, ok := delayedAccounts[address]; ok {
-			continue
-		}
-
-		amountStr := baseAccount["coins"].([]interface{})[0].(map[string]interface{})["amount"].(string)
-		amountI, err := strconv.ParseInt(amountStr, 10, 64)
-		if err != nil {
-			panic(fmt.Sprintln("Error parsing amount", err))
-		}
-
-		totalSupply = totalSupply.Add(sdk.NewDec(amountI))
-	}
-
-	theTime := time.Now().Unix()
-
-	vestingOnDays := make(map[int]sdk.Dec)
-
-	for _, account := range continuousAccounts {
-		amount := account.OriginalVesting[0].Amount // there are only 1 coin in the array for all accounts in genesis.json
-		startTime := account.StartTime
-		endTime := account.EndTime
-
-		totalSupply = totalSupply.Add(sdk.NewDecFromBigInt(amount.BigInt()))
-
-		if startTime > theTime {
-			continue
-		}
-
-		// math to get the number of tokens that have vested in a continuous vesting account
-		secondsTokenHasBeenVesting := big.NewInt(0).Sub(big.NewInt(endTime), big.NewInt(startTime))
-		numberOfFiveSecondChunksTokenHasBeenVesting := big.NewInt(0).Div(secondsTokenHasBeenVesting, big.NewInt(SECONDS_PER_BLOCK))
-		numberOfTokensVestingInTotalDuringTimeQuanta := big.NewInt(amount.Int64())
-		tokensVestedPerBlock := amount.BigInt().Div(numberOfTokensVestingInTotalDuringTimeQuanta, numberOfFiveSecondChunksTokenHasBeenVesting)
-		tokensVestedPerDay := tokensVestedPerBlock.Mul(tokensVestedPerBlock, big.NewInt((60 / SECONDS_PER_BLOCK) * 60 * 24)) 
-
-		// add the tokens that have not vested to the map by days since today
-		daysLeft := int((endTime - theTime) / 86400)
-
-		for vestingDay := 0; vestingDay <= daysLeft; vestingDay++ {
-			if _, ok := vestingOnDays[vestingDay]; !ok {
-				vestingOnDays[vestingDay] = sdk.NewDec(0)
-			}
-
-			vestingOnDays[vestingDay] = vestingOnDays[vestingDay].Add(sdk.NewDecFromBigInt(tokensVestedPerDay))
-		}
-	}
-
-	for _, account := range delayedAccounts {
-		amount := account.OriginalVesting[0].Amount // there are only 1 coin in the array for all accounts in genesis.json
-		endTime := account.EndTime
-
-		totalSupply = totalSupply.Add(sdk.NewDecFromBigInt(amount.BigInt()))
-
-		if endTime < theTime {
-			continue
-		}
-
-		// add the tokens that have not vested to the map by the Nth day since today
-		vestingDay := int((endTime - theTime) / 86400)
-
-		if _, ok := vestingOnDays[vestingDay]; !ok {
-			vestingOnDays[vestingDay] = sdk.NewDec(0)
-		}
-
-		vestingOnDays[vestingDay] = vestingOnDays[vestingDay].Add(sdk.NewDecFromBigInt(amount.BigInt()))
-	}
-
-	return totalSupply, &vestingOnDays 
-}
-
-func GetStakedTokens(appState map[string]interface{}) sdk.Dec {
-	genutil := (appState["genutil"]).(map[string]interface{})
-	genTxs := (genutil["gen_txs"]).([]interface{})
-	stakedTokens := sdk.NewDec(0)
-
-	for _, genTx := range genTxs {
-		body := (genTx.(map[string]interface{})["body"]).(map[string]interface{})
-		messages := (body["messages"]).([]interface{})
-
-		for _, message := range messages {
-			if message.(map[string]interface{})["@type"] == "/cosmos.staking.v1beta1.MsgCreateValidator" {
-				amount := message.(map[string]interface{})["value"].(map[string]interface{})["amount"].(string)
-				amountI, err := strconv.ParseInt(amount, 10, 64)
-				if err != nil {
-					panic(fmt.Sprintln("Error parsing amount", err))
-				}
-
-				stakedTokens = stakedTokens.Add(sdk.NewDec(amountI))
-			}
-		}
-	}
-
-	return stakedTokens
-}
-
-func GetParamsAndMinter(appState map[string]interface{}) (mintingTypes.Params, mintingTypes.Minter) {
-	mint := (appState["mint"]).(map[string]interface{})
-	minterJson := (mint["minter"]).(map[string]interface{})
-	paramsJson := (mint["params"]).(map[string]interface{})
-
-	params := mintingTypes.Params{
-		MintDenom: paramsJson["mint_denom"].(string),
-		InflationRateChange: sdk.MustNewDecFromStr(paramsJson["inflation_rate_change"].(string)),
-		InflationMax:        sdk.MustNewDecFromStr(paramsJson["inflation_max"].(string)),
-		InflationMin:        sdk.MustNewDecFromStr(paramsJson["inflation_min"].(string)),
-		GoalBonded:          sdk.MustNewDecFromStr(paramsJson["goal_bonded"].(string)),
-		BlocksPerYear:       uint64((60 / SECONDS_PER_BLOCK) * 60 * 24 *365), // change this as we're assuming 5 second blocks
-	}
-
-	minter := mintingTypes.Minter{
-		Inflation:          sdk.MustNewDecFromStr(minterJson["inflation"].(string)),
-		AnnualProvisions:   sdk.MustNewDecFromStr(minterJson["annual_provisions"].(string)),
-	}
-
-	return params, minter
-}
 
 
 func WriteCSV(writer *csv.Writer, vestingOnDays *map[int]sdk.Dec, totalSupply sdk.Dec, stakedTokens sdk.Dec, 
@@ -332,12 +126,12 @@ func main() {
 	// get accounts
 	appState := (genesis["app_state"].(map[string]interface{}))
 
-	continuousVestingAccounts, delayedVestingAccounts := GetVestingAccounts(appState)
+	continuousVestingAccounts, delayedVestingAccounts := vestingModule.GetVestingAccounts(appState)
 
 	// totalSupply here matches the total supply in the genesis.json from the banking module. A good verification that math is correct
-	totalSupply, vestingOnDays := GetTotalSupplyAndVestingSchedule(appState, continuousVestingAccounts, delayedVestingAccounts)
-	stakedTokens := GetStakedTokens(appState)
-	params, minter := GetParamsAndMinter(appState)
+	totalSupply, vestingOnDays := vestingModule.GetTotalSupplyAndVestingSchedule(appState, continuousVestingAccounts, delayedVestingAccounts)
+	stakedTokens := stakingModule.GetStakedTokens(appState)
+	params, minter := mintModule.GetParamsAndMinter(appState)
 
 	// write the data to a csv file
 	file, err = os.Create(csvStr)
