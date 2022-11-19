@@ -25,7 +25,7 @@ const (
 func WriteCSV(writer *csv.Writer, vestingOnDays *map[int]sdk.Dec, totalSupply sdk.Dec, stakedTokens sdk.Dec, 
 	minter mintingTypes.Minter, params mintingTypes.Params) {
 	// write the header
-	err := writer.Write([]string{"Days Since Genesis Analyzed", "Tokens Unvesting", "Inflation", "Staking rewards", "Circulating Supply", "Total Supply"})
+	err := writer.Write([]string{"Days Since Genesis Analyzed", "Tokens Unvesting", "Inflation", "Staking Rewards", "Circulating Supply", "Total Supply"})
 	if err != nil {
 		fmt.Println("Error writing to csv")
 		return
