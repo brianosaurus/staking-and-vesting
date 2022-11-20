@@ -26,7 +26,7 @@ go test ./...
 
 ## Output file formats
 
-### validators.csv
+### genesis_analysis.csv
 
 The columns are labeled on the first line of the csv: 
 
