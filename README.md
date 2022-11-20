@@ -18,6 +18,12 @@ Usage of ./genesisAnalyzer:
 ```
 
 getData will overwrite the output files on subsequent runs (for convenience).
+
+To Test 
+```sh
+go test ./...
+```
+
 ## Output file formats
 
 ### validators.csv
