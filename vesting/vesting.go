@@ -17,6 +17,11 @@ const (
 	SECONDS_PER_BLOCK = 5
 )
 
+var (
+	TheTime = time.Now().Unix()
+)
+
+
 func NewDelayedVestingAccount(account map[string]interface{}, codec *codec.LegacyAmino) *vestingTypes.DelayedVestingAccount {
 	rawAccount, err := json.Marshal(account)
 	if err != nil {
@@ -118,8 +123,6 @@ func GetTotalSupplyAndVestingSchedule(appState map[string]interface{}, continuou
 		totalSupply = totalSupply.Add(sdk.NewDec(amountI))
 	}
 
-	theTime := time.Now().Unix()
-
 	vestingOnDays := make(map[int]sdk.Dec)
 
 	for _, account := range continuousAccounts {
@@ -129,7 +132,7 @@ func GetTotalSupplyAndVestingSchedule(appState map[string]interface{}, continuou
 
 		totalSupply = totalSupply.Add(sdk.NewDecFromBigInt(amount.BigInt()))
 
-		if startTime > theTime {
+		if startTime > TheTime {
 			continue
 		}
 
@@ -141,9 +144,9 @@ func GetTotalSupplyAndVestingSchedule(appState map[string]interface{}, continuou
 		tokensVestedPerDay := tokensVestedPerBlock.Mul(tokensVestedPerBlock, big.NewInt((60 / SECONDS_PER_BLOCK) * 60 * 24)) 
 
 		// add the tokens that have not vested to the map by days since today
-		daysLeft := int((endTime - theTime) / 86400)
+		daysLeft := int((endTime - TheTime) / 86400)
 
-		for vestingDay := 0; vestingDay <= daysLeft; vestingDay++ {
+		for vestingDay := 0; vestingDay < daysLeft; vestingDay++ {
 			if _, ok := vestingOnDays[vestingDay]; !ok {
 				vestingOnDays[vestingDay] = sdk.NewDec(0)
 			}
@@ -158,12 +161,12 @@ func GetTotalSupplyAndVestingSchedule(appState map[string]interface{}, continuou
 
 		totalSupply = totalSupply.Add(sdk.NewDecFromBigInt(amount.BigInt()))
 
-		if endTime < theTime {
+		if endTime < TheTime {
 			continue
 		}
 
 		// add the tokens that have not vested to the map by the Nth day since today
-		vestingDay := int((endTime - theTime) / 86400)
+		vestingDay := int((endTime - TheTime) / 86400)
 
 		if _, ok := vestingOnDays[vestingDay]; !ok {
 			vestingOnDays[vestingDay] = sdk.NewDec(0)

@@ -22,7 +22,7 @@ func GetParamsAndMinter(appState map[string]interface{}) (mintingTypes.Params, m
 		InflationMax:        sdk.MustNewDecFromStr(paramsJson["inflation_max"].(string)),
 		InflationMin:        sdk.MustNewDecFromStr(paramsJson["inflation_min"].(string)),
 		GoalBonded:          sdk.MustNewDecFromStr(paramsJson["goal_bonded"].(string)),
-		BlocksPerYear:       uint64((60 / SECONDS_PER_BLOCK) * 60 * 24 *365), // change this as we're assuming 5 second blocks
+		BlocksPerYear:       uint64((60 / SECONDS_PER_BLOCK) * 60 * 24 * 365), // change this as we're assuming 5 second blocks
 	}
 
 	minter := mintingTypes.Minter{
