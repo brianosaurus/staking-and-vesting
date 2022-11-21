@@ -278,8 +278,6 @@ func TestWriteCSV(t *testing.T) {
 	writer := csv.NewWriter(bufWriter)
 	WriteCSV(writer, vestingOnDays, totalSupply, stakedTokens, minter, params)
 
-	_ = buf.String()// foo
-
 	bufString := strings.Split(buf.String(), "\n")
 
 	// I reaize this is obnoxiously long ... short on time to do this better
