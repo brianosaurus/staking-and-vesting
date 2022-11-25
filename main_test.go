@@ -201,6 +201,8 @@ MINTER =
 
 
 func TestWriteCSV(t *testing.T) {
+	vestingModule.TheTime = 1668956141 // make this static for testing
+
 	// create a decoder
 	stringReader := strings.NewReader(MINTER)
 	decoder := json.NewDecoder(stringReader)
@@ -282,6 +284,6 @@ func TestWriteCSV(t *testing.T) {
 
 	// I reaize this is obnoxiously long ... short on time to do this better
 	assert.Equal(t, "Days Since Genesis Analyzed,Tokens Unvesting,Inflation,Staking Rewards,Circulating Supply,Total Supply", bufString[0])
-	assert.Equal(t, "0,0,0.130000000000000000,0,1240202470400,11582258000000", bufString[1])
-	assert.Equal(t, "815,12295065600,0.132975646103044134,54508050696,11636766050696,11636766050696", bufString[len(bufString)-2])
+	assert.Equal(t, "0,0,0.130000000000000000,0,1215612339200,11582258000000", bufString[1])
+	assert.Equal(t, "817,12295065600,0.132982939353301183,54643482492,11636901482492,11636901482492", bufString[len(bufString)-2])
 }
