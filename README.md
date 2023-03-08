@@ -1,6 +1,6 @@
-# challenge2
+# Staking and Vesting
 
-## Running the challenge
+## Running the code
 
 To run the code 
 ```sh
